@@ -5,6 +5,8 @@
 [ext_resource type="Texture2D" uid="uid://cvyoa8mvxd5kg" path="res://assets/sprites/effects/smoke_puff.png" id="3_in3s4"]
 [ext_resource type="Texture2D" uid="uid://dl8hyfyptcpuv" path="res://assets/sprites/powerups/shield_frames.png" id="4_gty54"]
 [ext_resource type="Texture2D" uid="uid://drs8ynvsnpyug" path="res://assets/sprites/powerups/booster_frames.png" id="5_h8gag"]
+[ext_resource type="AudioStream" uid="uid://bphjmft8d8y4k" path="res://assets/audio/sfx/Drift Sound Effect.mp3" id="6_oq5in"]
+[ext_resource type="AudioStream" uid="uid://dvkdfc7umbbkr" path="res://assets/audio/sfx/dragon-studio-car-crash-sound-376882.mp3" id="7_6ldqv"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_8ubcx"]
 radius = 16.0
@@ -151,6 +153,15 @@ sprite_frames = SubResource("SpriteFrames_6vjhb")
 
 [node name="BoostEffect" type="AnimatedSprite2D" parent="." unique_id=291628882]
 visible = false
-position = Vector2(-40.000004, 2.9802322e-08)
+position = Vector2(-30, 1.1175871e-08)
 rotation = 3.129299
 sprite_frames = SubResource("SpriteFrames_w20yl")
+
+[node name="DriftSFX" type="AudioStreamPlayer2D" parent="." unique_id=1674753792]
+stream = ExtResource("6_oq5in")
+volume_db = 10.0
+bus = &"SFX"
+
+[node name="CrashSFX" type="AudioStreamPlayer2D" parent="." unique_id=767442460]
+stream = ExtResource("7_6ldqv")
+bus = &"SFX"

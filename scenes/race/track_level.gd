@@ -1,16 +1,21 @@
 extends Node2D
 
 # --- HUD Nodes ---
-@onready var countdown_label: Label = get_node_or_null("HUD/CountdownLabel")
-@onready var powerup_slot: TextureRect = get_node_or_null("HUD/PowerupSlot")
+@onready var countdown_label: Label = $HUD/CountdownLabel
+@onready var powerup_slot: TextureRect = $HUD/PowerupSlot
 @onready var lap_value: Label = $HUD/HBoxContainer/LapCard/LabelValue
 @onready var place_value: Label = $HUD/HBoxContainer/PlaceCard/PlaceValue
 @onready var player_marker: Control = $HUD/HBoxContainer/ProgressCard/PlayerMarker
 @onready var rival_marker: Control = $HUD/HBoxContainer/ProgressCard/RivalMarker
-
+@onready var pause_button: BaseButton = $HUD/PauseButton
+@onready var pause_menu: Control = $HUD/PauseMenu
+@onready var resume_button: BaseButton = $HUD/PauseMenu/MenuPanel/ResumeButton
+@onready var restart_button: BaseButton = $HUD/PauseMenu/MenuPanel/RestartButton
+@onready var car_select_button: BaseButton = $HUD/PauseMenu/MenuPanel/CarSelectionButton
+@onready var countdown_sfx: AudioStreamPlayer = $CountdownSFX
 # --- Track Triggers ---
-@onready var finish_line: Area2D = get_node_or_null("FinishLine")
-@onready var mid_checkpoint: Area2D = get_node_or_null("MidCheckpoint")
+@onready var finish_line: Area2D = $FinishLine
+@onready var mid_checkpoint: Area2D = $MidCheckpoint
 
 # Scenes
 const OIL_SLICK_SCENE = preload("res://scenes/pickups/oil_slick.tscn")
@@ -65,9 +70,11 @@ func _setup_marker_textures() -> void:
 			rival_marker.texture = rival_default_tex
 			
 func _ready() -> void:	
+# Lock both cars immediately upon loading the track
+# Lock both cars immediately upon loading or restarting
 	if typeof(GameManager) != TYPE_NIL:
 		GameManager.can_race = false
-
+		
 	# Apply selected car to track progress bar
 	_setup_marker_textures()
 	if typeof(GameManager) != TYPE_NIL:
@@ -110,8 +117,20 @@ func _ready() -> void:
 	else:
 		print("Warning: MidCheckpoint node not found!")
 
+# --- Pause System Signal Connections ---
+	if pause_button:
+		pause_button.pressed.connect(pause_game)
+	if resume_button:
+		resume_button.pressed.connect(resume_game)
+	if restart_button:
+		restart_button.pressed.connect(restart_race)
+	if car_select_button:
+		car_select_button.pressed.connect(goto_car_selection)
+		
 	_update_hud_text()
 	_start_countdown()
+	
+	
 
 func _process(_delta: float) -> void:
 	if race_finished:
@@ -265,7 +284,16 @@ func collect_powerup(powerup_name: String) -> void:
 		tween.tween_property(powerup_slot, "scale", Vector2.ONE, 0.2)
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Toggle pause on Escape key
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
+			if get_tree().paused:
+				resume_game()
+			else:
+				pause_game()
+			return
+
+		# Your existing 'E' key powerup deployment
 		if event.keycode == KEY_E and current_powerup != "":
 			if current_powerup == "oil":
 				_drop_oil_trap()
@@ -281,18 +309,38 @@ func _activate_player_nitro() -> void:
 	if player_car and player_car.has_method("activate_nitro_boost"):
 		player_car.activate_nitro_boost(2.5, 1.6)
 		
+func pause_game() -> void:
+	if pause_menu:
+		pause_menu.show()
+	get_tree().paused = true
+
+func resume_game() -> void:
+	if pause_menu:
+		pause_menu.hide()
+	get_tree().paused = false
+
+func restart_race() -> void:
+	# Unpause before changing/reloading scenes to prevent frozen physics
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
+func goto_car_selection() -> void:
+	# Unpause before navigating back
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/menu/car_select.tscn") # Adjust path to your car select scene
 func _drop_oil_trap() -> void:
-	if not player_car:
+	if not OIL_SLICK_SCENE or not player_car:
 		return
 
-	var backward_dir = player_car.global_transform.y.normalized()
-	var spawn_pos = player_car.global_position + (backward_dir * 18.0)
-
-	var oil = OIL_SLICK_SCENE.instantiate()
-	add_child(oil)
-	oil.global_position = spawn_pos
-	oil.z_index = 5
+	var slick = OIL_SLICK_SCENE.instantiate()
+	# Spawn 24 pixels behind player rear bumper
+	slick.global_position = player_car.global_position - (player_car.transform.x * 24.0)
 	
+	# Mark Player as dropper so you don't slip on it instantly!
+	slick.dropper = player_car
+	
+	get_tree().current_scene.add_child(slick)
+	print("Player dropped oil slick!")
 func _activate_player_shield() -> void:
 	if player_car and player_car.has_method("activate_shield"):
 		player_car.activate_shield(6.0)
@@ -306,24 +354,35 @@ func _consume_powerup() -> void:
 		powerup_slot.hide()
 		
 # --- Countdown Sequence ---
+# --- Countdown Sequence ---
 func _start_countdown() -> void:
 	if countdown_label:
 		countdown_label.show()
-	await get_tree().create_timer(0.5).timeout
+
+	await get_tree().create_timer(0.4).timeout
+
+	if countdown_sfx:
+		countdown_sfx.play()
+
+	# 1. READY (Both cars remain stationary)
 	await _animate_countdown_word("READY", Color("#FF3B30"))
+
+	# 2. SET (Both cars remain stationary)
 	await _animate_countdown_word("SET", Color("#FFCC00"))
 
+	# 3. GO! (Unlock cars here)
 	if typeof(GameManager) != TYPE_NIL:
 		GameManager.can_race = true
 
-	race_timer_active = true # <--- Start the timer here!
+	race_timer_active = true
 	current_lap_time = 0.0
 	total_race_time = 0.0
 
 	await _animate_countdown_word("GO!", Color("#34C759"))
+
 	if countdown_label:
 		countdown_label.hide()
-
+		
 func _animate_countdown_word(word_text: String, text_color: Color) -> void:
 	if not countdown_label:
 		return
@@ -331,6 +390,10 @@ func _animate_countdown_word(word_text: String, text_color: Color) -> void:
 	countdown_label.modulate = text_color
 	countdown_label.pivot_offset = countdown_label.size / 2.0
 	countdown_label.scale = Vector2(0.3, 0.3)
+	
+	# Pop-in bounce animation
 	var tween = create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(countdown_label, "scale", Vector2.ONE, 0.25)
-	await get_tree().create_timer(0.75).timeout
+	tween.tween_property(countdown_label, "scale", Vector2.ONE, 0.2)
+	
+	# Wait for the next beep tone (adjust between 0.8s - 0.9s if you need to fine-tune to the audio beat)
+	await get_tree().create_timer(0.85).timeout

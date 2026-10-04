@@ -22,12 +22,16 @@ var shield_timer: float = 0.0
 const SKID_MARK_SCENE = preload("res://scenes/effects/skid_mark.tscn")
 const SPARK_SCENE = preload("res://scenes/effects/impact_spark.tscn")
 
+const OIL_SLICK_SCENE = preload("res://scenes/pickups/oil_slick.tscn") # Make sure the path matches
 var current_speed: float = 0.0
 var spark_cooldown: float = 0.0
 var current_path_offset: float = 0.0
 
 var path_follow: PathFollow2D = null
 var path_2d: Path2D = null
+
+@onready var drift_sfx: AudioStreamPlayer2D = $DriftSFX
+var previous_rotation: float = 0.0
 
 # --- Oil Trap State ---
 var is_slowed: bool = false
@@ -50,19 +54,52 @@ func _ready() -> void:
 		sprite.top_level = false
 		sprite.z_index = 5
 
-func _process(_delta: float) -> void:
-	if is_shielded:
-		shield_timer -= _delta
-		if shield_timer <= 0.0:
-			deactivate_shield()
-			
-	if not sprite:
+func _process(delta: float) -> void:
+	# 1. Huwag kikilos hangga't hindi pa nagka-"GO!"
+	if typeof(GameManager) != TYPE_NIL and not GameManager.can_race:
 		return
 
-	var step_size = TAU / float(snap_angles)
-	var snapped_world_rot = round(global_rotation / step_size) * step_size
-	sprite.rotation = snapped_world_rot - global_rotation
-	
+	if sprite:
+		# Kunin ang direksyon kasama ang +90 degree offset (PI * 0.5) dahil pataas ang drawing ng sprite
+		var car_facing_rot = global_rotation + (PI * 0.5)
+
+		# Arcade Snapping calculation
+		var step_size = TAU / float(snap_angles)
+		var snapped_world_rot = round(car_facing_rot / step_size) * step_size
+
+		# I-apply ang final snapped rotation sa car sprite
+		sprite.rotation = snapped_world_rot - global_rotation
+
+		# I-sync ang orientation ng shield effect para nakahanay sa kaha ng kotse
+		if has_node("ShieldEffect") and get_node("ShieldEffect").visible:
+			$ShieldEffect.rotation = sprite.rotation
+		elif shield_effect and shield_effect.visible:
+			shield_effect.rotation = sprite.rotation
+
+		# I-sync ang orientation ng nitro boost effect/flames para pabalik ang buga
+		if has_node("NitroFlames") and get_node("NitroFlames").visible:
+			$NitroFlames.rotation = sprite.rotation
+		elif has_node("BoosterEffect") and get_node("BoosterEffect").visible:
+			$BoostEffect.rotation = sprite.rotation
+
+	# Detect kung gaano kabilis lumiko para sa Drift SFX
+	var turn_speed = abs(rotation - previous_rotation) / delta
+	previous_rotation = rotation
+
+	# Kung lumiko nang matalim, magpapatugtog ng skid sound
+	if drift_sfx:
+		if turn_speed > 2.2:
+			if not drift_sfx.playing:
+				drift_sfx.play()
+		else:
+			if drift_sfx.playing:
+				drift_sfx.stop()
+
+	# Shield timer countdown
+	if is_shielded:
+		shield_timer -= delta
+		if shield_timer <= 0.0:
+			deactivate_shield()
 func activate_shield(duration: float = 6.0) -> void:
 	is_shielded = true
 	shield_timer = duration
@@ -77,19 +114,20 @@ func deactivate_shield() -> void:
 		shield_effect.hide()
 
 func _physics_process(delta: float) -> void:
-	
+	# 1. Do NOT move or update path if countdown is still running
+	if typeof(GameManager) != TYPE_NIL and not GameManager.can_race:
+		velocity = Vector2.ZERO
+		return
+
+	if not path_follow:
+		return
+
 	if is_boosting:
 		boost_timer -= delta
 		if boost_timer <= 0.0:
 			end_nitro_boost()
+
 	# Multiply the rival's progress speed along PathFollow2D by speed_multiplier!
-	
-	# Block AI until "GO!" is triggered
-	if typeof(GameManager) != TYPE_NIL and not GameManager.can_race:
-		velocity = Vector2.ZERO
-		current_speed = 0.0
-		move_and_slide()
-		return
 
 	if not path_2d or not path_follow:
 		move_and_slide()
@@ -140,33 +178,24 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 # --- Oil Hazard Effect ---
+
 func apply_oil_slowdown(duration: float = 3.0) -> void:
-	if is_slowed:
+	if is_slowed or is_shielded:
 		return
-
+		
 	is_slowed = true
-	print(name, " slipped on oil!")
-
-	# 1. Visual flash
-	modulate = Color(0.45, 0.45, 0.45)
-
-	# 2. Spin out animation (one quick 360 degree spin)
-	var spin_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	spin_tween.tween_property(self, "rotation", rotation + TAU, 0.6)
-
-	# 3. Cut speed drastically
-	var original_base_speed = base_speed
-	base_speed = base_speed * 0.35
-	current_speed = current_speed * 0.35
-
-	# Wait for penalty duration
+	print("Rival slipped on an oil trap!")
+	
+	modulate = Color(0.4, 0.4, 0.4)
+	var original_speed = base_speed
+	base_speed = base_speed * 0.45
+	
 	await get_tree().create_timer(duration).timeout
-
-	# 4. Recover
-	base_speed = original_base_speed
+	
+	base_speed = original_speed
 	modulate = Color.WHITE
 	is_slowed = false
-
+	
 func _on_body_entered(body: Node2D) -> void:
 	print("MAY TUMAMA SA OIL: ", body.name)
 	
@@ -192,20 +221,25 @@ func has_stored_powerup() -> bool:
 
 func store_powerup(item_name: String) -> void:
 	stored_powerup = item_name
-	print("Rival stored powerup: ", item_name)
+	print("Rival stored: ", item_name)
 	
-	# AI behavior: after 1.5 to 3 seconds, the rival activates its shield!
+	# Maghihintay ng sandali bago gamitin (parang nag-iisip ang AI)
 	await get_tree().create_timer(randf_range(1.5, 3.0)).timeout
 	_ai_use_powerup()
+	
+func drop_rival_oil() -> void:
+	if not OIL_SLICK_SCENE:
+		return
 
-func _ai_use_powerup() -> void:
-	if stored_powerup == "shield":
-		if has_method("activate_shield"):
-			activate_shield(6.0)
-	elif stored_powerup == "nitro":
-		if has_method("activate_nitro_boost"):
-			activate_nitro_boost(2.5, 1.6)
-	stored_powerup = ""
+	var slick = OIL_SLICK_SCENE.instantiate()
+	# Spawn 24 pixels behind rival rear bumper
+	slick.global_position = global_position - (transform.x * 24.0)
+	
+	# Mark Rival as dropper so the rival doesn't slip o it instantly!
+	slick.dropper = self
+	
+	get_tree().current_scene.add_child(slick)
+	print("Rival dropped oil slick!")
 		
 @onready var boost_effect: AnimatedSprite2D = get_node_or_null("BoostEffect")
 
@@ -213,13 +247,27 @@ var is_boosting: bool = false
 var boost_timer: float = 0.0
 var speed_multiplier: float = 1.0
 
-func activate_nitro_boost(duration: float = 2.5, speed_buff: float = 1.6) -> void:
+func activate_nitro_boost(duration: float = 2.5, mult: float = 1.6) -> void:
 	is_boosting = true
 	boost_timer = duration
-	speed_multiplier = speed_buff
-	if boost_effect:
-		boost_effect.show()
-		boost_effect.play("default")
+	speed_multiplier = mult
+
+	# Hanapin ang booster node
+	var booster = $BoostEffect
+	if not booster:
+		booster = get_node_or_null("Sprite2D/BoosterEffect")
+	
+	if booster:
+		booster.show()
+		if booster.has_method("play"):
+			booster.play()
+		
+		# 1. Posisyon: 20-24 pixels sa LIKOD ng kotse (opposite ng heading)
+		# Dahil ang kotse ay nakaturo paharap, ilagay sa likurang bahagi:
+		booster.position = Vector2(0, 18) # Kung pataas ang base drawing, (0, 18) ang likod!
+		
+		# 2. Rotasyon: Paatras ang buga ng apoy
+		booster.rotation = deg_to_rad(180) # o 0 depende sa orientation ng flames sprite
 
 func end_nitro_boost() -> void:
 	is_boosting = false
@@ -227,3 +275,23 @@ func end_nitro_boost() -> void:
 	if boost_effect:
 		boost_effect.stop()
 		boost_effect.hide()
+
+func _ai_use_powerup() -> void:
+	print("Rival using powerup: ", stored_powerup)
+
+	match stored_powerup:
+		"oil":
+			drop_rival_oil()
+		"shield":
+			if has_method("activate_shield"):
+				activate_shield(6.0)
+		"nitro":
+			if has_method("activate_nitro_boost"):
+				activate_nitro_boost(2.5, 1.6)
+		_:
+			print("Unknown or empty powerup: ", stored_powerup)
+
+	# I-clear ang slot pagkatapos gamitin
+	stored_powerup = ""
+	
+	

@@ -19,8 +19,10 @@ extends Control
 @onready var settings_back_btn: Button = get_node_or_null("DimOverlay/SettingsModal/BackButton")
 
 # --- Settings Sliders ---
-@onready var music_slider: HSlider = get_node_or_null("DimOverlay/SettingsModal/MusicSlider")
-@onready var sfx_slider: HSlider = get_node_or_null("DimOverlay/SettingsModal/SFXSlider")
+@onready var music_slider: HSlider = $DimOverlay/SettingsModal/MusicSlider
+@onready var volume_slider: HSlider = $DimOverlay/SettingsModal/VolumeSlider
+@onready var sfx_slider: HSlider = $DimOverlay/SettingsModal/SFXSlider
+
 
 @onready var click_sfx: AudioStreamPlayer = get_node_or_null("ClickSound")
 
@@ -51,6 +53,25 @@ func _ready() -> void:
 	if sfx_slider:
 		sfx_slider.value_changed.connect(_on_sfx_volume_changed)
 
+# --- Setup Audio Sliders ---
+	_setup_audio_slider(music_slider, "Music")
+	_setup_audio_slider(volume_slider, "Master")
+	_setup_audio_slider(sfx_slider, "SFX")
+
+func _setup_audio_slider(slider: HSlider, bus_name: String) -> void:
+	if not slider:
+		return
+	var bus_idx = AudioServer.get_bus_index(bus_name)
+	if bus_idx != -1:
+		# Set slider's initial position based on current bus volume
+		slider.value = db_to_linear(AudioServer.get_bus_volume_db(bus_idx))
+		
+	# Connect value changed signal
+	slider.value_changed.connect(func(new_val: float):
+		if typeof(GameManager) != TYPE_NIL:
+			GameManager.set_bus_volume(bus_name, new_val)
+	)
+	
 # --- Modal Open / Close Helpers ---
 
 func _open_modal(modal: TextureRect) -> void:

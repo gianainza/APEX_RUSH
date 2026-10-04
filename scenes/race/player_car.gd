@@ -3,8 +3,8 @@ extends CharacterBody2D
 @export var player_id: int = 1
 
 # --- Retro Animation Settings ---
-@export var anim_fps: float = 8.0          # Lower = more choppy/animated (try 8.0, 10.0, or 12.0)
-@export var snap_angles: int = 14         # Number of rotation steps (0 = smooth rotation, 16 or 24 = classic arcade)
+@export var anim_fps: float = 8.0           # Lower = more choppy/animated (try 8.0, 10.0, or 12.0)
+@export var snap_angles: int = 14          # Number of rotation steps (0 = smooth rotation, 16 or 24 = classic arcade)
 
 # --- Speed Settings ---
 @export var base_speed: float = 180.0       # Slower, controllable cruise speed
@@ -15,6 +15,9 @@ extends CharacterBody2D
 @export var friction: float = 0.98
 @export var traction_drift: float = 0.05
 @export var drift_threshold: float = 0.06
+
+@onready var drift_sfx: AudioStreamPlayer2D = get_node_or_null("DriftSFX")
+@onready var crash_sfx: AudioStreamPlayer2D = $CrashSFX
 
 const SKID_MARK_SCENE = preload("res://scenes/effects/skid_mark.tscn")
 const SPARK_SCENE = preload("res://scenes/effects/impact_spark.tscn")
@@ -52,14 +55,16 @@ var shield_timer: float = 0.0
 var boost_multiplier: float = 1.0
 
 @onready var sprite: Sprite2D = get_node_or_null("Sprite2D")
-@onready var exhaust_smoke: AnimatedSprite2D = $AnimatedSprite2D
-@onready var left_tire: Marker2D = $LeftTire
-@onready var right_tire: Marker2D = $RightTire
+@onready var exhaust_smoke: AnimatedSprite2D = get_node_or_null("AnimatedSprite2D")
+@onready var left_tire: Marker2D = get_node_or_null("LeftTire")
+@onready var right_tire: Marker2D = get_node_or_null("RightTire")
+
+var is_slowed: bool = false
 
 func _ready() -> void:
 	# If a car was chosen in the car select menu, update player sprite
-	if typeof(GameManager) != TYPE_NIL and GameManager.selected_car_texture != null:
-		$Sprite2D.texture = GameManager.selected_car_texture
+	if typeof(GameManager) != TYPE_NIL and GameManager.selected_car_texture != null and sprite:
+		sprite.texture = GameManager.selected_car_texture
 	
 	if player_id == 2:
 		action_up = "p2_up"
@@ -83,7 +88,6 @@ func _process(_delta: float) -> void:
 	var snapped_world_rot = round(global_rotation / step_size) * step_size
 
 	# 2. Force the child sprite to display ONLY that snapped angle
-	# (Subtracting global_rotation cancels out the smooth physics rotation of the body)
 	sprite.rotation = snapped_world_rot - global_rotation
 
 func _physics_process(delta: float) -> void:
@@ -104,8 +108,11 @@ func _physics_process(delta: float) -> void:
 		boost_timer -= delta
 		if boost_timer <= 0.0:
 			is_boosting = false
+			if boost_effect:
+				boost_effect.stop()
+				boost_effect.hide()
 
-	var target_max_speed = boost_speed if is_boosting else base_speed
+	var target_max_speed = (boost_speed if is_boosting else base_speed) * boost_multiplier
 
 	# --- 2. Steering ---
 	var steer_input = Input.get_axis(action_left, action_right)
@@ -132,10 +139,19 @@ func _physics_process(delta: float) -> void:
 	velocity = velocity.lerp(forward_velocity, traction_drift)
 	velocity *= friction
 
-	if velocity.length() > 40.0:
-		var lateral_slip = abs(transform.y.dot(velocity.normalized()))
-		if lateral_slip > drift_threshold or abs(steer_input) > 0.3:
-			check_and_spawn_skids()
+	# Calculate lateral (sideways) slide relative to car heading
+	var lateral_slip: float = 0.0
+	if velocity.length() > 10.0:
+		lateral_slip = abs(velocity.normalized().dot(transform.y))
+
+# Play screech if the car is skidding OR if the player is holding/pressing Boost (Shift)
+	var is_skidding: bool = (velocity.length() > 40.0 and (lateral_slip > drift_threshold or abs(steer_input) > 0.5))
+	var should_screech: bool = is_skidding or is_boosting
+
+	if is_skidding or is_boosting:
+		check_and_spawn_skids()
+
+	_update_drift_audio(should_screech)
 
 	# --- 5. Movement & Collision Handling ---
 	move_and_slide()
@@ -146,12 +162,6 @@ func _physics_process(delta: float) -> void:
 		shield_timer -= delta
 		if shield_timer <= 0.0:
 			deactivate_shield()
-			
-# Handle Nitro Timer
-	if is_boosting:
-		boost_timer -= delta
-		if boost_timer <= 0.0:
-			end_nitro_boost()
 
 func activate_shield(duration: float = 6.0) -> void:
 	is_shielded = true
@@ -159,7 +169,6 @@ func activate_shield(duration: float = 6.0) -> void:
 	if shield_effect:
 		shield_effect.show()
 		shield_effect.play("default")
-		# Smooth pop-in animation
 		shield_effect.scale = Vector2(0.2, 0.2)
 		var tween = create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tween.tween_property(shield_effect, "scale", Vector2.ONE, 0.25)
@@ -194,17 +203,19 @@ func end_nitro_boost() -> void:
 	print("Super Nitro ended.")
 	
 func play_exhaust_puff() -> void:
-	exhaust_smoke.visible = true
-	exhaust_smoke.frame = 0
-	exhaust_smoke.play("default")
-	await exhaust_smoke.animation_finished
-	exhaust_smoke.visible = false
+	if exhaust_smoke:
+		exhaust_smoke.visible = true
+		exhaust_smoke.frame = 0
+		exhaust_smoke.play("default")
+		await exhaust_smoke.animation_finished
+		exhaust_smoke.visible = false
 
 func check_and_spawn_skids() -> void:
-	if global_position.distance_to(last_stamp_pos) >= stamp_distance:
-		var rear_center = (left_tire.global_position + right_tire.global_position) * 0.5
-		spawn_skid(rear_center)
-		last_stamp_pos = global_position
+	if left_tire and right_tire:
+		if global_position.distance_to(last_stamp_pos) >= stamp_distance:
+			var rear_center = (left_tire.global_position + right_tire.global_position) * 0.5
+			spawn_skid(rear_center)
+			last_stamp_pos = global_position
 
 func spawn_skid(pos: Vector2) -> void:
 	var skid = SKID_MARK_SCENE.instantiate()
@@ -238,6 +249,12 @@ func handle_car_collisions() -> void:
 			if spark_cooldown <= 0.0 and collider_cooldown <= 0.0:
 				if relative_speed > 50.0:
 					spawn_spark(collision.get_position())
+					
+					# --- Play the Crash SFX ---
+					if crash_sfx:
+						crash_sfx.pitch_scale = randf_range(0.9, 1.1)
+						crash_sfx.play()
+
 					spark_cooldown = 0.4
 					if "spark_cooldown" in collider:
 						collider.spark_cooldown = 0.4
@@ -247,28 +264,33 @@ func spawn_spark(pos: Vector2) -> void:
 	spark.global_position = pos
 	get_tree().current_scene.add_child(spark)
 
-var is_slowed: bool = false
+
 
 func apply_oil_slowdown(duration: float = 3.0) -> void:
-	if is_slowed:
-		return # Already slowed
+	if is_slowed or is_shielded:
+		return
 	
 	is_slowed = true
-	print(name, " slipped on oil!")
+	print("Player slipped on an oil trap!")
 	
-	# Visual cue: tint car slightly dark/slippery or spin
-	modulate = Color(0.5, 0.5, 0.5) 
+	# Visual cue: tint car dark/oily
+	modulate = Color(0.4, 0.4, 0.4)
 	
-	# Cut current speed / max speed in half
 	var original_speed = base_speed
-	base_speed = base_speed * 0.4
+	base_speed = base_speed * 0.45
 	
-	# Wait 3 seconds
 	await get_tree().create_timer(duration).timeout
 	
-	# Restore normal speed and color
 	base_speed = original_speed
 	modulate = Color.WHITE
 	is_slowed = false
-	
-	
+func _update_drift_audio(should_play: bool) -> void:
+	if not drift_sfx:
+		return
+
+	if should_play:
+		if not drift_sfx.playing:
+			drift_sfx.play()
+	else:
+		if drift_sfx.playing:
+			drift_sfx.stop()

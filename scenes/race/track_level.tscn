@@ -16,13 +16,15 @@
 [ext_resource type="Script" uid="uid://b36jfueay5krv" path="res://scenes/race/rival_path.gd" id="13_01nyc"]
 [ext_resource type="FontFile" uid="uid://dqbwvlukoho2q" path="res://assets/fonts/Minecraft.ttf" id="15_1s0yn"]
 [ext_resource type="Texture2D" uid="uid://be1hxesg0fpox" path="res://assets/sprites/powerups/oil_icon.png" id="16_03gor"]
+[ext_resource type="Texture2D" uid="uid://bwetj27f4ve4i" path="res://assets/sprites/ui/Place Counter_2.png" id="17_hv4lt"]
 [ext_resource type="PackedScene" uid="uid://dl8qrhlvpodul" path="res://scenes/pickups/oil_pickup.tscn" id="17_j7a4w"]
-[ext_resource type="Texture2D" uid="uid://7k2861jobpry" path="res://assets/sprites/ui/lap_counter_1.png" id="17_s6sj4"]
 [ext_resource type="Texture2D" uid="uid://3pbxwpgml2ug" path="res://assets/sprites/ui/track_progress_1.png" id="18_kql38"]
 [ext_resource type="Texture2D" uid="uid://bxo6pr5xx5syb" path="res://assets/sprites/cars/player_car.png" id="19_k2ewv"]
-[ext_resource type="Texture2D" uid="uid://dyj18ebrymfsa" path="res://assets/sprites/ui/place_counter_1.png" id="20_th8b1"]
+[ext_resource type="Texture2D" uid="uid://bqf0bv8dxh4mg" path="res://assets/sprites/ui/pauseicon_2.png" id="20_xcua0"]
+[ext_resource type="Texture2D" uid="uid://bx1qp78vhxptc" path="res://assets/sprites/ui/pausemune_2.png" id="21_hxqo3"]
 [ext_resource type="PackedScene" uid="uid://dsjqm7ioypcw4" path="res://scenes/pickups/shield_pickup.tscn" id="22_k2ewv"]
 [ext_resource type="PackedScene" uid="uid://kkn37e8dbhsy" path="res://scenes/pickups/nitro_pickup.tscn" id="23_th8b1"]
+[ext_resource type="AudioStream" uid="uid://tiuuafsq052e" path="res://assets/audio/sfx/Mario Kart Race Start - Sound Effect (HD).mp3" id="24_deo2k"]
 
 [sub_resource type="Curve2D" id="Curve2D_y5gkl"]
 _data = {
@@ -64,8 +66,8 @@ position = Vector2(38.999996, 69.00001)
 rotation = -3.2123487
 scale = Vector2(0.29000002, 0.29000002)
 script = ExtResource("13_01nyc")
-base_speed = 160.0
-max_speed = 210.0
+base_speed = 50.0
+max_speed = 250.0
 acceleration = 300.0
 steering_speed = 4.5
 friction = 0.96
@@ -477,7 +479,7 @@ curve = SubResource("Curve2D_y5gkl")
 
 [node name="RivalPathFollow" type="PathFollow2D" parent="RivalPath" unique_id=1630300323]
 position = Vector2(34, 71)
-rotates = false
+rotation = 3.1252007
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1206164353]
 layer = 10
@@ -527,13 +529,15 @@ text = "E"
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -40.0
-offset_bottom = 40.0
+offset_left = -1109.0
+offset_top = 1.0
+offset_right = -163.0
+offset_bottom = 159.0
 grow_horizontal = 0
 
 [node name="LapCard" type="TextureRect" parent="HUD/HBoxContainer" unique_id=1931556526]
 layout_mode = 2
-texture = ExtResource("17_s6sj4")
+texture = ExtResource("17_hv4lt")
 stretch_mode = 6
 
 [node name="LabelValue" type="Label" parent="HUD/HBoxContainer/LapCard" unique_id=1339354799]
@@ -568,7 +572,7 @@ texture = ExtResource("3_odkk4")
 
 [node name="PlaceCard" type="TextureRect" parent="HUD/HBoxContainer" unique_id=100019082]
 layout_mode = 2
-texture = ExtResource("20_th8b1")
+texture = ExtResource("17_hv4lt")
 stretch_mode = 5
 
 [node name="PlaceValue" type="Label" parent="HUD/HBoxContainer/PlaceCard" unique_id=428896703]
@@ -581,9 +585,78 @@ theme_override_fonts/font = ExtResource("15_1s0yn")
 theme_override_font_sizes/font_size = 50
 text = "TEST"
 
+[node name="PauseButton" type="TextureButton" parent="HUD" unique_id=220378290]
+offset_left = -101.00001
+offset_top = -54.000004
+offset_right = 1819.0
+offset_bottom = 1026.0
+scale = Vector2(0.15741488, 0.17032446)
+texture_normal = ExtResource("20_xcua0")
+
+[node name="PauseMenu" type="Control" parent="HUD" unique_id=1411119336]
+process_mode = 3
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DimBackground" type="ColorRect" parent="HUD/PauseMenu" unique_id=1405396124]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.627451)
+
+[node name="MenuPanel" type="TextureRect" parent="HUD/PauseMenu" unique_id=867423260]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -960.0
+offset_top = -540.0
+offset_right = 960.0
+offset_bottom = 540.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("21_hxqo3")
+
+[node name="ResumeButton" type="Button" parent="HUD/PauseMenu/MenuPanel" unique_id=915534039]
+layout_mode = 0
+offset_left = 733.0
+offset_top = 428.0
+offset_right = 1154.0
+offset_bottom = 522.0
+mouse_default_cursor_shape = 2
+flat = true
+
+[node name="RestartButton" type="Button" parent="HUD/PauseMenu/MenuPanel" unique_id=646491320]
+layout_mode = 0
+offset_left = 737.0
+offset_top = 539.0
+offset_right = 1156.0
+offset_bottom = 630.0
+mouse_default_cursor_shape = 2
+flat = true
+
+[node name="CarSelectionButton" type="Button" parent="HUD/PauseMenu/MenuPanel" unique_id=133479152]
+layout_mode = 0
+offset_left = 741.0
+offset_top = 649.0
+offset_right = 1156.0
+offset_bottom = 746.0
+mouse_default_cursor_shape = 2
+flat = true
+
 [node name="OilPickup" parent="." unique_id=1709311586 instance=ExtResource("17_j7a4w")]
 z_index = 5
-position = Vector2(-81, 60)
+position = Vector2(-113, -18)
 
 [node name="RoadwayArea" type="Area2D" parent="." unique_id=1438958390]
 visible = false
@@ -655,9 +728,32 @@ position = Vector2(18, 64)
 shape = SubResource("RectangleShape2D_6vjhb")
 
 [node name="ShieldPickup" parent="." unique_id=170150319 instance=ExtResource("22_k2ewv")]
-position = Vector2(-53, 70)
+position = Vector2(-137, -52)
 
 [node name="NitroPickup" parent="." unique_id=4002456 instance=ExtResource("23_th8b1")]
-position = Vector2(-5, 64)
+position = Vector2(-128, 2)
+
+[node name="CountdownSFX" type="AudioStreamPlayer" parent="." unique_id=866053047]
+stream = ExtResource("24_deo2k")
+bus = &"SFX"
+
+[node name="OilPickup2" parent="." unique_id=329214881 instance=ExtResource("17_j7a4w")]
+position = Vector2(-21, -60)
+
+[node name="ShieldPickup2" parent="." unique_id=1881593402 instance=ExtResource("22_k2ewv")]
+position = Vector2(9, -38)
+
+[node name="OilPickup3" parent="." unique_id=1032188528 instance=ExtResource("17_j7a4w")]
+position = Vector2(85, 53)
+
+[node name="NitroPickup2" parent="." unique_id=856363029 instance=ExtResource("23_th8b1")]
+position = Vector2(0, 72)
+
+[node name="NitroPickup3" parent="." unique_id=2027332882 instance=ExtResource("23_th8b1")]
+position = Vector2(120, 5)
+
+[node name="NitroPickup4" parent="." unique_id=1620646226 instance=ExtResource("23_th8b1")]
+position = Vector2(92, -46)
+scale = Vector2(0.43027037, 0.72352064)
 
 [editable path="RivalCar"]

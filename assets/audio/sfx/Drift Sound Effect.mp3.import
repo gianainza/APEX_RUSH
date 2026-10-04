@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bphjmft8d8y4k"
+path="res://.godot/imported/Drift Sound Effect.mp3-4dcf28242bc197393154bbeacf2a83a5.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/sfx/Drift Sound Effect.mp3"
+dest_files=["res://.godot/imported/Drift Sound Effect.mp3-4dcf28242bc197393154bbeacf2a83a5.mp3str"]
+
+[params]
+
+loop=true
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

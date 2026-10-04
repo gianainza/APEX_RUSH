@@ -144,7 +144,7 @@ offset_right = 356.0
 offset_bottom = 92.0
 mouse_default_cursor_shape = 2
 max_value = 1.0
-step = 0.5
+step = 0.1
 value = 1.0
 
 [node name="SFXSlider" type="HSlider" parent="DimOverlay/SettingsModal" unique_id=884137551]
@@ -155,7 +155,7 @@ offset_right = 355.0
 offset_bottom = 127.0
 mouse_default_cursor_shape = 2
 max_value = 1.0
-step = 0.5
+step = 0.1
 value = 1.0
 
 [node name="VolumeSlider" type="HSlider" parent="DimOverlay/SettingsModal" unique_id=742572430]
@@ -166,7 +166,7 @@ offset_right = 355.0
 offset_bottom = 163.0
 mouse_default_cursor_shape = 2
 max_value = 1.0
-step = 0.5
+step = 0.1
 value = 1.0
 
 [node name="CreditsModal" type="TextureRect" parent="DimOverlay" unique_id=1593019205]
